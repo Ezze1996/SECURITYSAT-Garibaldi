@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Control de Acceso - Hospital Central / COIR / FUESMEN</title>
+  
+  <!-- Configuración App PWA -->
+  <link rel="manifest" href='data:application/json,{"name":"Control de Acceso","short_name":"Acceso SAT","start_url":"/","display":"standalone","background_color":"#1e3a8a","theme_color":"#1e3a8a","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/1063/1063376.png","sizes":"192x192","type":"image/png"}]}'>
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Acceso SAT">
+  <meta name="theme-color" content="#1e3a8a">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/1063/1063376.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Librería ZXing actualizada y optimizada para lectura de Código PDF417 (Opción 1) -->
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
+  <!-- Librería Tesseract.js para OCR con previsualización y filtros (Opción 2 y 3) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #seccion-impresion, #seccion-impresion * { visibility: visible; }
+      #seccion-impresion { position: absolute; left: 0; top: 0; width: 100%; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 font-sans text-slate-800 min-h-screen">
+
+  <header class="bg-blue-900 text-white p-4 shadow-lg sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <!-- LOGO CON EVENTOS TÁCTILES PARA EL MENÚ SECRETO -->
+        <img 
+          src="securitysat-logo.png" 
+          alt="Security SAT Logo" 
+          class="h-12 w-auto object-contain bg-white/10 p-1 rounded-lg select-none cursor-pointer"
+          oncontextmenu="return false;"
+          onmousedown="iniciarPulsacionLarga()"
+          onmouseup="cancelarPulsacionLarga()"
+          onmouseleave="cancelarPulsacionLarga()"
+          ontouchstart="iniciarPulsacionLarga()"
+          ontouchend="cancelarPulsacionLarga()"
+          ontouchcancel="cancelarPulsacionLarga()"
+        >
+        <div>
+          <h1 class="text-xl font-bold leading-tight">Control de Acceso e Ingresos / Salidas</h1>
+          <p class="text-xs text-blue-200">Empresa de Seguridad Privada | Hospital Central - COIR - FUESMEN</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto m-4 p-4">
+
+    <!-- BARRA DE PESTAÑAS -->
+    <div class="flex border-b border-slate-300 mb-6 bg-white rounded-t-xl shadow-sm overflow-hidden">
+      <button id="btn-tab-personal" onclick="cambiarPestana('personal')" class="flex-1 py-4 font-bold text-blue-800 border-b-4 border-blue-800 bg-slate-50 transition">
+        🏢 Personal del Hospital
+      </button>
+      <button id="btn-tab-proveedores" onclick="cambiarPestana('proveedores')" class="flex-1 py-4 font-bold text-slate-500 hover:text-blue-800 transition">
+        🚚 Proveedores (Límite 20 min)
+      </button>
+      <button id="btn-tab-historial" onclick="cambiarPestana('historial')" class="flex-1 py-4 font-bold text-slate-500 hover:text-blue-800 transition">
+        📋 Historial de Movimientos
+      </button>
+      <button id="btn-tab-base" onclick="cambiarPestana('base')" class="hidden flex-1 py-4 font-bold text-amber-600 hover:text-amber-800 transition">
+        🔒 Padrón (Admin)
+      </button>
+    </div>
+
+    <!-- SECCIÓN PERSONAL -->
+    <section id="tab-personal" class="bg-white p-6 rounded-b-xl shadow-md">
+      <div class="flex flex-wrap justify-between items-center border-b pb-3 mb-4 gap-2">
+        <div>
+          <h2 class="text-lg font-bold text-slate-800">Fichada de Personal (Ingreso y Salida)</h2>
+          <p class="text-xs text-slate-500">Seleccione el método automático de lectura o ingrese DNI/Legajo.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" onclick="abrirModalOpcionesDNI('personal')" class="bg-blue-800 text-white font-semibold px-4 py-2 rounded-lg hover:bg-blue-900 transition flex items-center gap-2 text-sm shadow">
+            📷 Opciones de Lectura DNI
+          </button>
+        </div>
+      </div>
+      
+      <form id="form-personal" onsubmit="registrarPersonal(event)" class="space-y-6">
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-600 mb-2">Tipo de Movimiento</label>
+          <div class="grid grid-cols-2 gap-4">
+            <button type="button" id="btn-mov-ingreso" onclick="seleccionarMovimientoPersonal('INGRESO')" class="py-3.5 px-4 rounded-xl font-bold text-base transition flex items-center justify-center gap-2 border-2 border-emerald-600 bg-emerald-50 text-emerald-800">
+              🟢 INGRESO
+            </button>
+            <button type="button" id="btn-mov-salida" onclick="seleccionarMovimientoPersonal('SALIDA')" class="py-3.5 px-4 rounded-xl font-bold text-base transition flex items-center justify-center gap-2 border-2 border-slate-200 bg-slate-50 text-slate-500">
+              🔴 SALIDA
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-blue-50/60 p-4 rounded-xl border border-blue-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold uppercase text-blue-900 mb-1">DNI del Agente</label>
+            <input type="text" id="p-dni" oninput="buscarYAutocompletarPersonal()" required class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-600 outline-none text-base font-semibold" placeholder="Escriba DNI..." autofocus>
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-blue-900 mb-1">N° de Legajo</label>
+            <input type="text" id="p-legajo" oninput="buscarYAutocompletarPersonal()" class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-600 outline-none text-base" placeholder="Escriba Legajo...">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Nombre y Apellido</label>
+            <input type="text" id="p-nombre" required class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Función / Rol</label>
+            <select id="p-rol" required class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">Seleccione rol...</option>
+              <option value="Supervisor">Supervisor / Seguridad</option>
+              <option value="Médico">Médico / Médica</option>
+              <option value="Enfermero">Enfermero / Enfermera</option>
+              <option value="Vigilador">Vigilador / Seguridad</option>
+              <option value="Administrativo">Administrativo</option>
+              <option value="Mantenimiento">Mantenimiento / Limpieza</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Institución Destino</label>
+            <select id="p-institucion" required class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-blue-900">
+              <option value="">Seleccione lugar...</option>
+              <option value="Hospital Central">Hospital Central</option>
+              <option value="COIR">COIR</option>
+              <option value="FUESMEN">FUESMEN</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="border-t pt-4">
+          <label class="block text-xs font-bold uppercase text-slate-700 mb-3">Modo de Ingreso y Rodados</label>
+          <div class="flex flex-wrap gap-6 mb-4">
+            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+              <input type="radio" name="transporte" value="A pie" checked onclick="toggleVehiculoPersonal()" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+              🚶 A pie
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+              <input type="radio" name="transporte" value="Bicicleta" onclick="toggleVehiculoPersonal()" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+              🚲 Bicicleta
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+              <input type="radio" name="transporte" value="Monopatín" onclick="toggleVehiculoPersonal()" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+              🛴 Monopatín
+            </label>
+          </div>
+
+          <div id="campos-vehiculo-personal" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4 bg-amber-50/70 p-4 rounded-xl border border-amber-200">
+            <div>
+              <label class="block text-xs font-bold uppercase text-amber-900 mb-1">Marca / Color de la Bicicleta o Monopatín</label>
+              <input type="text" id="p-marca" class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: Venzo Negra, Xiaomi Pro 2...">
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase text-amber-900 mb-1">Puesto / Lugar donde la deja estacionada</label>
+              <input type="text" id="p-puesto" class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: Guardería Norte, Sector Guardia, Patio Interno...">
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Novedades u Observaciones (Opcional)</label>
+          <textarea id="p-novedades" rows="2" class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="Ingrese detalles o novedades relevantes del ingreso..."></textarea>
+        </div>
+
+        <button type="submit" id="btn-submit-personal" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3.5 rounded-xl shadow transition text-base">
+          ✅ Confirmar y Registrar INGRESO de Personal
+        </button>
+      </form>
+
+      <div class="mt-8 border-t pt-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-slate-800 text-base">Personal Actualmente en Predio</h3>
+          <span id="cant-personal-activo" class="text-xs bg-blue-100 text-blue-800 font-bold px-3 py-1 rounded-full">0 Presentes</span>
+        </div>
+
+        <div class="overflow-x-auto border border-slate-200 rounded-xl shadow-sm">
+          <table class="w-full text-sm text-left text-slate-600">
+            <thead class="bg-slate-100 text-slate-700 uppercase text-xs font-bold">
+              <tr>
+                <th class="p-3">Hora Ingreso</th>
+                <th class="p-3">Nombre / DNI</th>
+                <th class="p-3">Rol / Legajo</th>
+                <th class="p-3">Institución</th>
+                <th class="p-3">Transporte</th>
+                <th class="p-3">Novedades</th>
+                <th class="p-3">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-personal-activo-body" class="divide-y divide-slate-200"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN PROVEEDORES -->
+    <section id="tab-proveedores" class="bg-white p-6 rounded-b-xl shadow-md hidden">
+      <div class="flex flex-wrap justify-between items-center border-b pb-3 mb-4 gap-3">
+        <div>
+          <h2 class="text-lg font-bold text-slate-800">Registro de Proveedores y Visitas</h2>
+          <p class="text-xs text-slate-500">Recuerde que el tiempo máximo autorizado en predio es de 20 minutos.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-bold bg-amber-100 text-amber-800 px-3 py-1.5 rounded-full border border-amber-300">
+            ⏱ Permanencia Máxima: 20 min
+          </span>
+          <button type="button" onclick="abrirModalOpcionesDNI('proveedor')" class="bg-amber-700 text-white font-semibold px-4 py-2 rounded-lg hover:bg-amber-800 transition flex items-center gap-2 text-sm shadow">
+            📷 Opciones de Lectura DNI
+          </button>
+        </div>
+      </div>
+
+      <form id="form-proveedor" onsubmit="registrarProveedor(event)" class="space-y-6">
+        <div class="bg-amber-50/60 p-4 rounded-xl border border-amber-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold uppercase text-amber-900 mb-1">DNI del Proveedor</label>
+            <input type="text" id="prov-dni" oninput="buscarYAutocompletarProveedor()" required class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-base font-semibold" placeholder="Ingrese DNI...">
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-amber-900 mb-1">Celular / Teléfono</label>
+            <input type="tel" id="prov-celular" required class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-base" placeholder="Ej: 261 1234567">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Nombre y Apellido</label>
+            <input type="text" id="prov-nombre" required class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Nombre de la Empresa / Proveedora</label>
+            <input type="text" id="prov-empresa" required class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none" placeholder="Ej: Andreani, OCA, Medtronic, Oxígeno...">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Modo de Ingreso</label>
+            <select id="prov-modo" onchange="togglePatenteProveedor()" class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none">
+              <option value="Vehículo">Vehículo (Auto / Camioneta / Camión)</option>
+              <option value="A pie">A pie</option>
+            </select>
+          </div>
+          <div id="campo-patente">
+            <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Dominio / Patente del Vehículo</label>
+            <input type="text" id="prov-patente" class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none uppercase tracking-wider font-semibold" placeholder="AA123CD / ABC123">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Novedades / Carga transportada (Opcional)</label>
+          <textarea id="prov-novedades" rows="2" class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-sm" placeholder="Detalle entrega de bultos, equipos o insumos..."></textarea>
+        </div>
+
+        <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3.5 rounded-xl shadow transition text-base">
+          🚚 Registrar Ingreso de Proveedor e Iniciar Contador (20 Min)
+        </button>
+      </form>
+
+      <div class="mt-8 border-t pt-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-slate-800 text-base">Proveedores Actuales dentro de las Instalaciones</h3>
+          <span id="cant-proveedores-activos" class="text-xs bg-slate-200 text-slate-700 font-bold px-3 py-1 rounded-full">0 Activos</span>
+        </div>
+
+        <div class="overflow-x-auto border border-slate-200 rounded-xl shadow-sm">
+          <table class="w-full text-sm text-left text-slate-600">
+            <thead class="bg-slate-100 text-slate-700 uppercase text-xs font-bold">
+              <tr>
+                <th class="p-3">Hora Ingreso</th>
+                <th class="p-3">Nombre</th>
+                <th class="p-3">Empresa</th>
+                <th class="p-3">Vehículo / Patente</th>
+                <th class="p-3">Tiempo Transcurrido (Máx 20m)</th>
+                <th class="p-3">Novedades</th>
+                <th class="p-3">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-proveedores-body" class="divide-y divide-slate-200"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN HISTORIAL -->
+    <section id="tab-historial" class="bg-white p-6 rounded-b-xl shadow-md hidden">
+      <div class="flex justify-between items-center border-b pb-3 mb-4">
+        <div>
+          <h2 class="text-lg font-bold text-slate-800">Registro Histórico de Ingresos y Salidas</h2>
+          <p class="text-xs text-slate-500">Consulte auditoría de accesos registrados en la garita de seguridad.</p>
+        </div>
+        <button onclick="descargarExcelHistorial()" class="bg-emerald-700 text-white font-semibold px-4 py-2 rounded-lg hover:bg-emerald-800 transition text-sm flex items-center gap-2">
+          📊 Exportar Historial en CSV/Excel
+        </button>
+      </div>
+
+      <div class="overflow-x-auto border border-slate-200 rounded-xl">
+        <table class="w-full text-sm text-left text-slate-600">
+          <thead class="bg-slate-100 text-slate-700 uppercase text-xs font-bold">
+            <tr>
+              <th class="p-3">Fecha y Hora</th>
+              <th class="p-3">Tipo</th>
+              <th class="p-3">Nombre / DNI</th>
+              <th class="p-3">Rol / Empresa</th>
+              <th class="p-3">Destino / Detalle</th>
+              <th class="p-3">Novedades</th>
+              <th class="p-3">Estado / Salida</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-historial-body" class="divide-y divide-slate-200"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SECCIÓN PADRÓN (ADMIN) -->
+    <section id="tab-base" class="bg-white p-6 rounded-b-xl shadow-md hidden">
+      <div class="flex flex-wrap justify-between items-center border-b pb-3 mb-4 gap-2">
+        <div>
+          <h2 class="text-lg font-bold text-slate-800">Padrón de Personal y Proveedores Frecuentes</h2>
+          <p class="text-xs text-slate-500">Base de datos guardada en la memoria local del navegador.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="exportarBackupJSON()" class="bg-blue-600 text-white font-semibold px-3 py-1.5 rounded-lg hover:bg-blue-700 transition text-xs flex items-center gap-1">
+            ☁️ Exportar Backup (Nube/Drive)
+          </button>
+          <label class="bg-slate-600 text-white font-semibold px-3 py-1.5 rounded-lg hover:bg-slate-700 transition text-xs flex items-center gap-1 cursor-pointer">
+            📥 Restaurar Backup
+            <input type="file" id="input-restore-file" accept=".json" onchange="restaurarBackupJSON(event)" class="hidden">
+          </label>
+          <button onclick="borrarTodaLaBaseDatos()" class="bg-red-100 text-red-700 border border-red-300 font-semibold px-3 py-1.5 rounded-lg hover:bg-red-200 transition text-xs flex items-center gap-1">
+            🔒 Limpiar Base de Datos (Admin)
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <h3 class="font-bold text-blue-900 border-b pb-2 mb-3">Personal del Hospital Registrado (<span id="count-db-personal">0</span>)</h3>
+          <div class="overflow-y-auto max-h-80 border rounded-lg">
+            <table class="w-full text-xs text-left">
+              <thead class="bg-slate-100 uppercase">
+                <tr>
+                  <th class="p-2">DNI</th>
+                  <th class="p-2">Nombre</th>
+                  <th class="p-2">Rol</th>
+                  <th class="p-2">Institución</th>
+                  <th class="p-2 text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-db-personal" class="divide-y"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="font-bold text-amber-900 border-b pb-2 mb-3">Proveedores Frecuentes Registrados (<span id="count-db-proveedores">0</span>)</h3>
+          <div class="overflow-y-auto max-h-80 border rounded-lg">
+            <table class="w-full text-xs text-left">
+              <thead class="bg-slate-100 uppercase">
+                <tr>
+                  <th class="p-2">DNI</th>
+                  <th class="p-2">Nombre</th>
+                  <th class="p-2">Empresa</th>
+                  <th class="p-2">Celular</th>
+                  <th class="p-2 text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-db-proveedores" class="divide-y"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL DE ALERTA DE PERMANENCIA -->
+  <div id="modal-alerta" class="fixed inset-0 bg-red-950/80 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border-4 border-red-600 text-center animate-bounce">
+      <div class="text-5xl mb-2">🚨</div>
+      <h3 class="font-black text-red-600 text-xl uppercase tracking-wide">¡ALERTA DE PERMANENCIA!</h3>
+      <p id="modal-alerta-mensaje" class="text-sm font-semibold text-slate-700 my-4"></p>
+      <button onclick="cerrarModalAlerta()" class="w-full bg-red-600 text-white font-bold py-3 rounded-xl hover:bg-red-700 transition">
+        Entendido / Silenciar
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL PRINCIPAL DE SELECCIÓN DE LAS 3 OPCIONES AUTOMÁTICAS -->
+  <div id="modal-opciones-dni" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl flex flex-col items-center">
+      <div class="w-full flex justify-between items-center mb-4">
+        <h3 class="font-bold text-slate-800 text-lg">Seleccione el Método de Detección</h3>
+        <button onclick="cerrarModalOpcionesDNI()" class="text-slate-400 hover:text-slate-600 font-bold text-xl">&times;</button>
+      </div>
+
+      <div class="flex flex-col gap-3 w-full">
+        <!-- Opción 1 -->
+        <button onclick="iniciarOpcion1_CodigoBarras()" class="bg-blue-900 hover:bg-blue-800 text-white p-4 rounded-xl text-left font-semibold shadow transition flex items-center gap-3">
+          <span class="text-2xl">📱</span>
+          <div>
+            <div class="font-bold">1. Escanear Código de Barras (Dorso)</div>
+            <div class="text-xs text-blue-200">Lectura 100% exacta sin letras al azar.</div>
+          </div>
+        </button>
+
+        <!-- Opción 2 -->
+        <button onclick="iniciarOpcion2_CamaraOCR()" class="bg-emerald-800 hover:bg-emerald-700 text-white p-4 rounded-xl text-left font-semibold shadow transition flex items-center gap-3">
+          <span class="text-2xl">📷</span>
+          <div>
+            <div class="font-bold">2. Foto Frontal / Dorso con OCR Avanzado</div>
+            <div class="text-xs text-emerald-200">Aplica filtros automáticos de contraste y escala de grises.</div>
+          </div>
+        </button>
+
+        <!-- Opción 3 -->
+        <button onclick="iniciarOpcion3_GaleriaOCR()" class="bg-amber-700 hover:bg-amber-600 text-white p-4 rounded-xl text-left font-semibold shadow transition flex items-center gap-3">
+          <span class="text-2xl">🖼️</span>
+          <div>
+            <div class="font-bold">3. Subir Foto / Captura desde Archivo</div>
+            <div class="text-xs text-amber-200">Selecciona imagen guardada para procesar sin reflejos.</div>
+          </div>
+        </button>
+      </div>
+
+      <div class="mt-6 w-full">
+        <button onclick="cerrarModalOpcionesDNI()" class="w-full bg-slate-200 text-slate-800 font-semibold py-2.5 rounded-xl hover:bg-slate-300 transition">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CÁMARA OPCIÓN 1 (CÓDIGO DE BARRAS) -->
+  <div id="modal-camara-barcode" class="fixed inset-0 bg-black/90 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl flex flex-col items-center">
+      <div class="w-full flex justify-between items-center mb-3">
+        <h3 class="font-bold text-slate-800 text-lg">Apunte al Código de Barras (Dorso DNI)</h3>
+        <button onclick="cerrarEscanerBarcode()" class="text-slate-400 hover:text-slate-600 font-bold text-xl">&times;</button>
+      </div>
+      <div class="relative w-full rounded-xl overflow-hidden border-4 border-slate-300 bg-black flex justify-center items-center">
+        <video id="video-barcode-stream" class="w-full h-64 object-cover"></video>
+      </div>
+      <p class="text-xs text-slate-500 mt-3 text-center">Coloque el código de barras trasero frente a la cámara.</p>
+      <div class="mt-4 w-full">
+        <button onclick="cerrarEscanerBarcode()" class="w-full bg-slate-200 text-slate-800 font-semibold py-2.5 rounded-xl hover:bg-slate-300 transition">Regresar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CÁMARA OPCIÓN 2 (FOTO CON PREVISUALIZACIÓN Y OCR) -->
+  <div id="modal-camara-ocr" class="fixed inset-0 bg-black/90 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl flex flex-col items-center">
+      <div class="w-full flex justify-between items-center mb-3">
+        <h3 class="font-bold text-slate-800 text-lg">Capturar Imagen Nítida del DNI</h3>
+        <button onclick="cerrarEscanerOCR()" class="text-slate-400 hover:text-slate-600 font-bold text-xl">&times;</button>
+      </div>
+      
+      <div id="contenedor-video-ocr" class="relative w-full rounded-xl overflow-hidden border-4 border-slate-300 bg-black flex flex-col items-center">
+        <video id="video-ocr-stream" autoplay playsinline class="w-full h-64 object-cover"></video>
+        <button onclick="tomarFotoOCR()" class="my-3 bg-emerald-600 text-white font-bold px-6 py-3 rounded-full shadow-lg hover:bg-emerald-700 transition">📸 Tomar Foto y Procesar</button>
+      </div>
+
+      <!-- Vista previa congelada antes de pasar al motor OCR -->
+      <div id="contenedor-preview-ocr" class="hidden w-full flex flex-col items-center">
+        <canvas id="canvas-preview" class="w-full h-48 object-contain bg-slate-900 rounded-xl mb-3 border"></canvas>
+        <div id="estado-procesamiento" class="text-sm font-bold text-blue-800 animate-pulse mb-3">⚙️ Procesando imagen con filtros y OCR...</div>
+      </div>
+
+      <div class="mt-4 w-full">
+        <button onclick="cerrarEscanerOCR()" class="w-full bg-slate-200 text-slate-800 font-semibold py-2.5 rounded-xl hover:bg-slate-300 transition">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input oculto para Opción 3 (Subir archivo directo desde galería o cámara nativa) -->
+  <input type="file" id="input-archivo-dni" accept="image/*" capture="environment" class="hidden" onchange="procesarArchivoDNI(event)">
+
+  <script>
+    let dbPersonal = JSON.parse(localStorage.getItem('sec_db_personal')) || {};
+    let dbProveedores = JSON.parse(localStorage.getItem('sec_db_proveedores')) || {};
+    let historialMovimientos = JSON.parse(localStorage.getItem('sec_historial')) || [];
+    let proveedoresActivos = JSON.parse(localStorage.getItem('sec_prov_activos')) || [];
+    let personalActivo = JSON.parse(localStorage.getItem('sec_personal_activo')) || [];
+    let alertasNotificadas = new Set();
+    
+    let movimientoPersonalSeleccionado = 'INGRESO';
+    let contextoActualDNI = 'personal'; 
+    let temporizadorPulsacion = null;
+    let codeReader = null;
+    let streamCameraOCR = null;
+
+    window.onload = function() {
+      renderizarTablasBaseDatos();
+      renderizarProveedoresActivos();
+      renderizarPersonalActivo();
+      renderizarHistorial();
+      setInterval(() => {
+        renderizarProveedoresActivos();
+        revisarAlertasProveedores();
+      }, 30000);
+    };
+
+    function iniciarPulsacionLarga() {
+      temporizadorPulsacion = setTimeout(() => {
+        alternarMenuSecreto();
+      }, 1000);
+    }
+
+    function cancelarPulsacionLarga() {
+      if (temporizadorPulsacion) {
+        clearTimeout(temporizadorPulsacion);
+        temporizadorPulsacion = null;
+      }
+    }
+
+    function alternarMenuSecreto() {
+      if (navigator.vibrate) navigator.vibrate(150);
+
+      const btnBase = document.getElementById('btn-tab-base');
+      const estaVisible = !btnBase.classList.contains('hidden');
+
+      if (estaVisible) {
+        btnBase.classList.add('hidden');
+        cambiarPestana('personal');
+        alert("🔒 Modo Administrador desactivado.");
+      } else {
+        const clave = prompt("🔓 ACCESO ADMINISTRADOR\nIngrese la contraseña:");
+        if (clave === "2580") {
+          btnBase.classList.remove('hidden');
+          cambiarPestana('base');
+          alert("✅ Modo Administrador activado.");
+        } else if (clave !== null) {
+          alert("❌ Clave incorrecta.");
+        }
+      }
+    }
+
+    function reproducirSonidoAlerta() {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 1.2);
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    function revisarAlertasProveedores() {
+      const ahora = new Date();
+      let excedidos = [];
+
+      proveedoresActivos.forEach(p => {
+        const horaIng = new Date(p.horaIngreso);
+        const diffMin = Math.floor((ahora - horaIng) / 60000);
+        if (diffMin > 20 && !alertasNotificadas.has(p.id)) {
+          excedidos.push(p);
+          alertasNotificadas.add(p.id);
+        }
+      });
+
+      if (excedidos.length > 0) {
+        reproducirSonidoAlerta();
+        const listaNombres = excedidos.map(e => `• ${e.nombre} (${e.empresa}) - Patente: ${e.patente}`).join('<br>');
+        document.getElementById('modal-alerta-mensaje').innerHTML = `Se ha superado el tiempo límite de 20 minutos para:<br><br><b>${listaNombres}</b>`;
+        document.getElementById('modal-alerta').classList.remove('hidden');
+      }
+    }
+
+    function cerrarModalAlerta() {
+      document.getElementById('modal-alerta').classList.add('hidden');
+    }
+
+    function guardarEnStorage() {
+      localStorage.setItem('sec_db_personal', JSON.stringify(dbPersonal));
+      localStorage.setItem('sec_db_proveedores', JSON.stringify(dbProveedores));
+      localStorage.setItem('sec_historial', JSON.stringify(historialMovimientos));
+      localStorage.setItem('sec_prov_activos', JSON.stringify(proveedoresActivos));
+      localStorage.setItem('sec_personal_activo', JSON.stringify(personalActivo));
+      renderizarTablasBaseDatos();
+    }
+
+    function seleccionarMovimientoPersonal(mov) {
+      movimientoPersonalSeleccionado = mov;
+      const btnIngreso = document.getElementById('btn-mov-ingreso');
+      const btnSalida = document.getElementById('btn-mov-salida');
+      const btnSubmit = document.getElementById('btn-submit-personal');
+
+      if (mov === 'INGRESO') {
+        btnIngreso.className = "py-3.5 px-4 rounded-xl font-bold text-base transition flex items-center justify-center gap-2 border-2 border-emerald-600 bg-emerald-50 text-emerald-800";
+        btnSalida.className = "py-3.5 px-4 rounded-xl font-bold text-base transition flex items-center justify-center gap-2 border-2 border-slate-200 bg-slate-50 text-slate-500";
+        btnSubmit.className = "w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3.5 rounded-xl shadow transition text-base";
+        btnSubmit.innerText = "✅ Confirmar y Registrar INGRESO de Personal";
+      } else {
+        btnSalida.className = "py-3.5 px-4 rounded-xl font-bold text-base transition flex items-center justify-center gap-2 border-2 border-red-600 bg-red-50 text-red-800";
+        btnIngreso.className = "py-3.5 px-4 rounded-xl font-bold text-base transition flex items-center justify-center gap-2 border-2 border-slate-200 bg-slate-50 text-slate-500";
+        btnSubmit.className = "w-full bg-red-700 hover:bg-red-800 text-white font-bold py-3.5 rounded-xl shadow transition text-base";
+        btnSubmit.innerText = "🔴 Confirmar y Registrar SALIDA de Personal";
+      }
+    }
+
+    function buscarYAutocompletarPersonal() {
+      const dni = document.getElementById('p-dni').value.trim();
+      const legajo = document.getElementById('p-legajo').value.trim();
+
+      let registro = null;
+      if (dni && dbPersonal[dni]) {
+        registro = dbPersonal[dni];
+      } else if (legajo) {
+        registro = Object.values(dbPersonal).find(p => p.legajo === legajo);
+      }
+
+      if (registro) {
+        document.getElementById('p-dni').value = registro.dni || dni;
+        document.getElementById('p-legajo').value = registro.legajo || '';
+        document.getElementById('p-nombre').value = registro.nombre || '';
+        document.getElementById('p-rol').value = registro.rol || '';
+        document.getElementById('p-institucion').value = registro.institucion || '';
+        
+        const estaPresente = personalActivo.some(p => p.dni === registro.dni);
+        if (estaPresente) {
+          seleccionarMovimientoPersonal('SALIDA');
+        } else {
+          seleccionarMovimientoPersonal('INGRESO');
+        }
+      }
+    }
+
+    function buscarYAutocompletarProveedor() {
+      const dni = document.getElementById('prov-dni').value.trim();
+      if (dni && dbProveedores[dni]) {
+        const registro = dbProveedores[dni];
+        document.getElementById('prov-nombre').value = registro.nombre || '';
+        document.getElementById('prov-celular').value = registro.celular || '';
+        document.getElementById('prov-empresa').value = registro.empresa || '';
+      }
+    }
+
+    function cambiarPestana(pestana) {
+      document.getElementById('tab-personal').classList.add('hidden');
+      document.getElementById('tab-proveedores').classList.add('hidden');
+      document.getElementById('tab-historial').classList.add('hidden');
+      document.getElementById('tab-base').classList.add('hidden');
+
+      document.getElementById('btn-tab-personal').className = "flex-1 py-4 font-bold text-slate-500 hover:text-blue-800 transition";
+      document.getElementById('btn-tab-proveedores').className = "flex-1 py-4 font-bold text-slate-500 hover:text-blue-800 transition";
+      document.getElementById('btn-tab-historial').className = "flex-1 py-4 font-bold text-slate-500 hover:text-blue-800 transition";
+      
+      const btnBase = document.getElementById('btn-tab-base');
+      btnBase.className = "flex-1 py-4 font-bold text-amber-600 hover:text-amber-800 transition" + (btnBase.classList.contains('hidden') ? ' hidden' : '');
+
+      if (pestana === 'personal') {
+        document.getElementById('tab-personal').classList.remove('hidden');
+        document.getElementById('btn-tab-personal').className = "flex-1 py-4 font-bold text-blue-800 border-b-4 border-blue-800 bg-slate-50 transition";
+      } else if (pestana === 'proveedores') {
+        document.getElementById('tab-proveedores').classList.remove('hidden');
+        document.getElementById('btn-tab-proveedores').className = "flex-1 py-4 font-bold text-amber-700 border-b-4 border-amber-600 bg-slate-50 transition";
+      } else if (pestana === 'historial') {
+        document.getElementById('tab-historial').classList.remove('hidden');
+        document.getElementById('btn-tab-historial').className = "flex-1 py-4 font-bold text-blue-800 border-b-4 border-blue-800 bg-slate-50 transition";
+      } else if (pestana === 'base') {
+        document.getElementById('tab-base').classList.remove('hidden');
+        btnBase.className = "flex-1 py-4 font-bold text-amber-800 border-b-4 border-amber-600 bg-slate-50 transition";
+      }
+    }
+
+    function toggleVehiculoPersonal() {
+      const valor = document.querySelector('input[name="transporte"]:checked').value;
+      const camposRodado = document.getElementById('campos-vehiculo-personal');
+      if (valor === 'Bicicleta' || valor === 'Monopatín') {
+        camposRodado.classList.remove('hidden');
+      } else {
+        camposRodado.classList.add('hidden');
+      }
+    }
+
+    function togglePatenteProveedor() {
+      const modo = document.getElementById('prov-modo').value;
+      const campoPatente = document.getElementById('campo-patente');
+      if (modo === 'A pie') {
+        campoPatente.classList.add('hidden');
+      } else {
+        campoPatente.classList.remove('hidden');
+      }
+    }
+
+    function registrarPersonal(e) {
+      e.preventDefault();
+      const dni = document.getElementById('p-dni').value.trim();
+      const legajo = document.getElementById('p-legajo').value.trim();
+      const nombre = document.getElementById('p-nombre').value.trim();
+      const rol = document.getElementById('p-rol').value;
+      const institucion = document.getElementById('p-institucion').value;
+      const transporte = document.querySelector('input[name="transporte"]:checked').value;
+      const marca = document.getElementById('p-marca').value.trim();
+      const puesto = document.getElementById('p-puesto').value.trim();
+      const novedades = document.getElementById('p-novedades').value.trim();
+      const modoDetalle = transporte === 'A pie' ? 'A pie' : `${transporte} (${marca || 'S/M'} - Puesto: ${puesto || 'N/A'})`;
+
+      dbPersonal[dni] = { dni, legajo, nombre, rol, institucion };
+
+      if (movimientoPersonalSeleccionado === 'INGRESO') {
+        personalActivo.push({
+          id: Date.now(),
+          dni,
+          legajo,
+          nombre,
+          rol,
+          institucion,
+          transporte: modoDetalle,
+          novedades: novedades || 'Ninguna',
+          horaIngreso: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+        });
+
+        historialMovimientos.unshift({
+          fecha: new Date().toLocaleString(),
+          tipo: 'INGRESO PERS.',
+          nombreDni: `${nombre} (DNI: ${dni})`,
+          rolEmpresa: `${rol} / ${legajo ? 'Leg: ' + legajo : 'Sin Legajo'}`,
+          destinoDetalle: institucion,
+          novedades: novedades || 'Ninguna',
+          modo: modoDetalle,
+          estado: 'Ingresado'
+        });
+
+        alert(`🟢 INGRESO registrado con éxito para ${nombre}.`);
+      } else {
+        personalActivo = personalActivo.filter(p => p.dni !== dni);
+
+        historialMovimientos.unshift({
+          fecha: new Date().toLocaleString(),
+          tipo: 'SALIDA PERS.',
+          nombreDni: `${nombre} (DNI: ${dni})`,
+          rolEmpresa: `${rol} / ${legajo ? 'Leg: ' + legajo : 'Sin Legajo'}`,
+          destinoDetalle: institucion,
+          novedades: novedades || 'Salida registrada',
+          modo: modoDetalle,
+          estado: 'Finalizado'
+        });
+
+        alert(`🔴 SALIDA registrada con éxito para ${nombre}.`);
+      }
+
+      guardarEnStorage();
+      renderizarPersonalActivo();
+      renderizarHistorial();
+
+      document.getElementById('form-personal').reset();
+      seleccionarMovimientoPersonal('INGRESO');
+      toggleVehiculoPersonal();
+    }
+
+    function registrarSalidaPersonalDirecto(dni) {
+      const p = personalActivo.find(item => item.dni === dni);
+      if (p) {
+        personalActivo = personalActivo.filter(item => item.dni !== dni);
+
+        historialMovimientos.unshift({
+          fecha: new Date().toLocaleString(),
+          tipo: 'SALIDA PERS.',
+          nombreDni: `${p.nombre} (DNI: ${p.dni})`,
+          rolEmpresa: `${p.rol} / ${p.legajo ? 'Leg: ' + p.legajo : 'Sin Legajo'}`,
+          destinoDetalle: p.institucion,
+          novedades: 'Salida directa',
+          modo: p.transporte,
+          estado: 'Finalizado'
+        });
+
+        guardarEnStorage();
+        renderizarPersonalActivo();
+        renderizarHistorial();
+        alert(`🔴 Salida registrada para ${p.nombre}.`);
+      }
+    }
+
+    function registrarProveedor(e) {
+      e.preventDefault();
+      const dni = document.getElementById('prov-dni').value.trim();
+      const celular = document.getElementById('prov-celular').value.trim();
+      const nombre = document.getElementById('prov-nombre').value.trim();
+      const empresa = document.getElementById('prov-empresa').value.trim();
+      const modo = document.getElementById('prov-modo').value;
+      const patente = modo === 'A pie' ? 'N/A' : document.getElementById('prov-patente').value.trim().toUpperCase();
+      const novedades = document.getElementById('prov-novedades').value.trim();
+
+      dbProveedores[dni] = { dni, celular, nombre, empresa };
+
+      const nuevoProvActivo = {
+        id: Date.now(),
+        dni,
+        nombre,
+        empresa,
+        celular,
+        modo,
+        patente,
+        novedades: novedades || 'Ninguna',
+        horaIngreso: new Date().toISOString()
+      };
+
+      proveedoresActivos.push(nuevoProvActivo);
+
+      historialMovimientos.unshift({
+        fecha: new Date().toLocaleString(),
+        tipo: 'PROVEEDOR',
+        nombreDni: `${nombre} (DNI: ${dni})`,
+        rolEmpresa: empresa,
+        destinoDetalle: `Cel: ${celular}`,
+        novedades: novedades || 'Ninguna',
+        modo: modo === 'A pie' ? 'A pie' : `Vehículo (Patente: ${patente})`,
+        estado: 'En Predio (20m max)'
+      });
+
+      guardarEnStorage();
+      renderizarProveedoresActivos();
+      renderizarHistorial();
+      revisarAlertasProveedores();
+
+      alert(`🚚 Proveedor ${nombre} (${empresa}) registrado correctamente.`);
+      document.getElementById('form-proveedor').reset();
+    }
+
+    function registrarSalidaProveedor(id) {
+      const prov = proveedoresActivos.find(p => p.id === id);
+      if (prov) {
+        proveedoresActivos = proveedoresActivos.filter(p => p.id !== id);
+        alertasNotificadas.delete(id);
+        
+        historialMovimientos.unshift({
+          fecha: new Date().toLocaleString(),
+          tipo: 'SALIDA PROV',
+          nombreDni: `${prov.nombre} (DNI: ${prov.dni})`,
+          rolEmpresa: prov.empresa,
+          destinoDetalle: 'Salida de Predio',
+          novedades: 'Finalizó estadía',
+          modo: prov.modo,
+          estado: 'Finalizado'
+        });
+
+        guardarEnStorage();
+        renderizarProveedoresActivos();
+        renderizarHistorial();
+      }
+    }
+
+    function renderizarPersonalActivo() {
+      const tbody = document.getElementById('tabla-personal-activo-body');
+      tbody.innerHTML = '';
+      document.getElementById('cant-personal-activo').innerText = `${personalActivo.length} Presentes`;
+
+      personalActivo.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50";
+        tr.innerHTML = `
+          <td class="p-3 font-mono font-bold">${p.horaIngreso} hs</td>
+          <td class="p-3 font-semibold text-slate-800">${p.nombre}<br><span class="text-xs text-slate-400 font-normal">DNI: ${p.dni}</span></td>
+          <td class="p-3 font-medium">${p.rol} <span class="text-xs text-slate-400">(${p.legajo || 'S/L'})</span></td>
+          <td class="p-3 font-semibold text-blue-900">${p.institucion}</td>
+          <td class="p-3 text-xs">${p.transporte}</td>
+          <td class="p-3 text-xs italic text-slate-600">${p.novedades}</td>
+          <td class="p-3">
+            <button onclick="registrarSalidaPersonalDirecto('${p.dni}')" class="bg-red-700 hover:bg-red-800 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition">
+              🚪 Salida
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderizarProveedoresActivos() {
+      const tbody = document.getElementById('tabla-proveedores-body');
+      tbody.innerHTML = '';
+      document.getElementById('cant-proveedores-activos').innerText = `${proveedoresActivos.length} Activos`;
+
+      const ahora = new Date();
+
+      proveedoresActivos.forEach(p => {
+        const horaIng = new Date(p.horaIngreso);
+        const diffMin = Math.floor((ahora - horaIng) / 60000);
+        const excedido = diffMin > 20;
+
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50";
+        tr.innerHTML = `
+          <td class="p-3 font-mono font-bold">${horaIng.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} hs</td>
+          <td class="p-3 font-semibold text-slate-800">${p.nombre}<br><span class="text-xs text-slate-400 font-normal">DNI: ${p.dni} | Tel: ${p.celular}</span></td>
+          <td class="p-3 font-medium">${p.empresa}</td>
+          <td class="p-3 font-mono">${p.patente}</td>
+          <td class="p-3">
+            <span class="px-2.5 py-1 text-xs rounded-full font-bold inline-block ${excedido ? 'bg-red-100 text-red-800 border border-red-300 animate-pulse' : 'bg-emerald-100 text-emerald-800'}">
+              ${diffMin} min / 20 min ${excedido ? '🚨 ¡EXCEDIDO!' : ''}
+            </span>
+          </td>
+          <td class="p-3 text-xs italic text-slate-600">${p.novedades}</td>
+          <td class="p-3">
+            <button onclick="registrarSalidaProveedor(${p.id})" class="bg-red-700 hover:bg-red-800 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition">
+              🚪 Salida
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderizarHistorial() {
+      const tbody = document.getElementById('tabla-historial-body');
+      tbody.innerHTML = '';
+
+      historialMovimientos.slice(0, 100).forEach(h => {
+        const isSalida = h.tipo.includes('SALIDA');
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50";
+        tr.innerHTML = `
+          <td class="p-3 font-mono text-xs">${h.fecha}</td>
+          <td class="p-3 font-bold text-xs"><span class="px-2 py-0.5 rounded ${isSalida ? 'bg-red-100 text-red-800' : h.tipo.includes('PERS') ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}">${h.tipo}</span></td>
+          <td class="p-3 font-medium text-slate-800">${h.nombreDni}</td>
+          <td class="p-3 text-xs">${h.rolEmpresa}</td>
+          <td class="p-3 font-semibold text-slate-700">${h.destinoDetalle}</td>
+          <td class="p-3 text-xs italic text-slate-600">${h.novedades || '-'}</td>
+          <td class="p-3 text-xs font-bold ${isSalida ? 'text-red-700' : 'text-emerald-700'}">${h.estado}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderizarTablasBaseDatos() {
+      const tbodyP = document.getElementById('tabla-db-personal');
+      tbodyP.innerHTML = '';
+      const arrayP = Object.values(dbPersonal);
+      document.getElementById('count-db-personal').innerText = arrayP.length;
+
+      arrayP.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="p-2 font-mono">${p.dni}</td>
+          <td class="p-2 font-bold">${p.nombre}</td>
+          <td class="p-2">${p.rol}</td>
+          <td class="p-2 text-blue-700 font-semibold">${p.institucion}</td>
+          <td class="p-2 text-center space-x-1">
+            <button onclick="editarPersonalEnBase('${p.dni}')" class="bg-amber-500 text-white px-2 py-1 rounded text-xs">✏️</button>
+            <button onclick="eliminarPersonalEnBase('${p.dni}')" class="bg-red-600 text-white px-2 py-1 rounded text-xs">🗑️</button>
+          </td>
+        `;
+        tbodyP.appendChild(tr);
+      });
+
+      const tbodyProv = document.getElementById('tabla-db-proveedores');
+      tbodyProv.innerHTML = '';
+      const arrayProv = Object.values(dbProveedores);
+      document.getElementById('count-db-proveedores').innerText = arrayProv.length;
+
+      arrayProv.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="p-2 font-mono">${p.dni}</td>
+          <td class="p-2 font-bold">${p.nombre}</td>
+          <td class="p-2">${p.empresa}</td>
+          <td class="p-2">${p.celular}</td>
+          <td class="p-2 text-center space-x-1">
+            <button onclick="editarProveedorEnBase('${p.dni}')" class="bg-amber-500 text-white px-2 py-1 rounded text-xs">✏️</button>
+            <button onclick="eliminarProveedorEnBase('${p.dni}')" class="bg-red-600 text-white px-2 py-1 rounded text-xs">🗑️</button>
+          </td>
+        `;
+        tbodyProv.appendChild(tr);
+      });
+    }
+
+    function editarPersonalEnBase(dni) {
+      const p = dbPersonal[dni];
+      if (!p) return;
+      const nuevoNombre = prompt("Editar Nombre y Apellido:", p.nombre);
+      if (nuevoNombre === null) return;
+      const nuevoLegajo = prompt("Editar Legajo:", p.legajo || "");
+      if (nuevoLegajo === null) return;
+      const nuevoRol = prompt("Editar Rol:", p.rol);
+      if (nuevoRol === null) return;
+      const nuevaInstitucion = prompt("Editar Institución:", p.institucion);
+      if (nuevaInstitucion === null) return;
+
+      dbPersonal[dni] = { dni, legajo: nuevoLegajo.trim(), nombre: nuevoNombre.trim(), rol: nuevoRol.trim(), institucion: nuevaInstitucion.trim() };
+      guardarEnStorage();
+      alert(`✅ Datos actualizados.`);
+    }
+
+    function eliminarPersonalEnBase(dni) {
+      if (confirm(`¿Eliminar DNI ${dni}?`)) {
+        delete dbPersonal[dni];
+        guardarEnStorage();
+      }
+    }
+
+    function editarProveedorEnBase(dni) {
+      const p = dbProveedores[dni];
+      if (!p) return;
+      const nuevoNombre = prompt("Editar Nombre:", p.nombre);
+      if (nuevoNombre === null) return;
+      const nuevaEmpresa = prompt("Editar Empresa:", p.empresa);
+      if (nuevaEmpresa === null) return;
+      const nuevoCelular = prompt("Editar Celular:", p.celular);
+      if (nuevoCelular === null) return;
+
+      dbProveedores[dni] = { dni, nombre: nuevoNombre.trim(), empresa: nuevaEmpresa.trim(), celular: nuevoCelular.trim() };
+      guardarEnStorage();
+      alert(`✅ Proveedor actualizado.`);
+    }
+
+    function eliminarProveedorEnBase(dni) {
+      if (confirm(`¿Eliminar proveedor DNI ${dni}?`)) {
+        delete dbProveedores[dni];
+        guardarEnStorage();
+      }
+    }
+
+    function descargarExcelHistorial() {
+      if (historialMovimientos.length === 0) {
+        alert('No hay movimientos cargados.');
+        return;
+      }
+      let csvContent = "data:text/csv;charset=utf-8,Fecha,Tipo,Nombre_DNI,Rol_Empresa,Destino_Detalle,Novedades,Estado\n";
+      historialMovimientos.forEach(row => {
+        csvContent += `"${row.fecha}","${row.tipo}","${row.nombreDni}","${row.rolEmpresa}","${row.destinoDetalle}","${row.novedades || ''}","${row.estado}"\n`;
+      });
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Historial_Acceso_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function exportarBackupJSON() {
+      const dataBackup = { dbPersonal, dbProveedores, historialMovimientos, proveedoresActivos, personalActivo };
+      const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(dataBackup, null, 2))}`;
+      const link = document.createElement("a");
+      link.setAttribute("href", jsonString);
+      link.setAttribute("download", `Backup_${new Date().toISOString().slice(0,10)}.json`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function restaurarBackupJSON(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = JSON.parse(e.target.result);
+          dbPersonal = data.dbPersonal || {};
+          dbProveedores = data.dbProveedores || {};
+          historialMovimientos = data.historialMovimientos || [];
+          proveedoresActivos = data.proveedoresActivos || [];
+          personalActivo = data.personalActivo || [];
+          guardarEnStorage();
+          renderizarHistorial();
+          renderizarProveedoresActivos();
+          renderizarPersonalActivo();
+          alert("✅ Base restaurada.");
+        } catch (err) {
+          alert("❌ Archivo inválido.");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function borrarTodaLaBaseDatos() {
+      if (prompt("Ingrese contraseña de admin:") === "2580") {
+        if (confirm('⚠️ ¿Borrar todo?')) {
+          localStorage.clear();
+          location.reload();
+        }
+      } else {
+        alert('❌ Clave incorrecta.');
+      }
+    }
+
+    /* CONTROL DE LAS 3 OPCIONES AUTOMÁTICAS */
+    function abrirModalOpcionesDNI(tipo) {
+      contextoActualDNI = tipo;
+      document.getElementById('modal-opciones-dni').classList.remove('hidden');
+    }
+
+    function cerrarModalOpcionesDNI() {
+      document.getElementById('modal-opciones-dni').classList.add('hidden');
+    }
+
+    /* OPCIÓN 1: Lector de código de barras PDF417 optimizado para móviles */
+    async function iniciarOpcion1_CodigoBarras() {
+      cerrarModalOpcionesDNI();
+      document.getElementById('modal-camara-barcode').classList.remove('hidden');
+
+      if (typeof ZXing !== 'undefined') {
+        codeReader = new ZXing.BrowserMultiFormatReader();
+        try {
+          const videoInputDevices = await codeReader.listVideoInputDevices();
+          let selectedDeviceId = videoInputDevices[0].deviceId;
+          
+          for (const device of videoInputDevices) {
+            const label = device.label.toLowerCase();
+            if (label.includes('back') || label.includes('trasera') || label.includes('environment')) {
+              selectedDeviceId = device.deviceId;
+              break;
+            }
+          }
+
+          codeReader.decodeFromVideoDevice(selectedDeviceId, 'video-barcode-stream', (result, err) => {
+            if (result) {
+              procesarTextoPDF417(result.text);
+            }
+          });
+        } catch (err) {
+          console.error("Error al iniciar la cámara trasera: ", err);
+          alert("No se pudo iniciar la cámara para código de barras. Pruebe usando la Opción 3 (Subir foto).");
+          cerrarEscanerBarcode();
+        }
+      }
+    }
+
+    function cerrarEscanerBarcode() {
+      if (codeReader) {
+        try {
+          codeReader.reset();
+        } catch (e) {
+          console.warn(e);
+        }
+        codeReader = null;
+      }
+      document.getElementById('modal-camara-barcode').classList.add('hidden');
+    }
+
+    function procesarTextoPDF417(rawText) {
+      const partes = rawText.split('@');
+      let apellido = "";
+      let nombre = "";
+      let dni = "";
+
+      if (partes.length >= 4) {
+        if (partes[0].length > 1 && /^\d+$/.test(partes[3])) {
+          apellido = partes[0].trim();
+          nombre = partes[1].trim();
+          dni = partes[3].trim();
+        } else if (partes[4] && /^\d+$/.test(partes[4])) {
+          apellido = partes[1].trim();
+          nombre = partes[2].trim();
+          dni = partes[4].trim();
+        }
+      }
+
+      if (!dni) {
+        const matchDNI = rawText.match(/\b\d{7,8}\b/);
+        if (matchDNI) dni = matchDNI[0];
+      }
+
+      if (dni) {
+        if (navigator.vibrate) navigator.vibrate(200);
+        cerrarEscanerBarcode();
+        autocompletarCamposFinales(dni, (apellido && nombre) ? `${apellido} ${nombre}` : (nombre || "Verificar Nombre"));
+      }
+    }
+
+    /* OPCIÓN 2: Foto con previsualización y filtros ópticos para OCR */
+    function iniciarOpcion2_CamaraOCR() {
+      cerrarModalOpcionesDNI();
+      document.getElementById('modal-camara-ocr').classList.remove('hidden');
+      document.getElementById('contenedor-video-ocr').classList.remove('hidden');
+      document.getElementById('contenedor-preview-ocr').classList.add('hidden');
+
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(stream => {
+          streamCameraOCR = stream;
+          const video = document.getElementById('video-ocr-stream');
+          video.srcObject = stream;
+        })
+        .catch(err => {
+          alert("No se pudo acceder a la cámara. Intente usando la Opción 3 (Subir archivo).");
+          cerrarEscanerOCR();
+        });
+    }
+
+    function cerrarEscanerOCR() {
+      if (streamCameraOCR) {
+        streamCameraOCR.getTracks().forEach(track => track.stop());
+        streamCameraOCR = null;
+      }
+      document.getElementById('modal-camara-ocr').classList.add('hidden');
+    }
+
+    function tomarFotoOCR() {
+      const video = document.getElementById('video-ocr-stream');
+      const canvas = document.getElementById('canvas-preview');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      aplicarFiltrosGrisesYContraste(canvas);
+
+      if (streamCameraOCR) {
+        streamCameraOCR.getTracks().forEach(track => track.stop());
+        streamCameraOCR = null;
+      }
+
+      document.getElementById('contenedor-video-ocr').classList.add('hidden');
+      document.getElementById('contenedor-preview-ocr').classList.remove('hidden');
+
+      const dataUrl = canvas.toDataURL('image/png');
+      ejecutarTesseractOCR(dataUrl);
+    }
+
+    /* OPCIÓN 3: Subir archivo de imagen o captura directa de galería */
+    function iniciarOpcion3_GaleriaOCR() {
+      cerrarModalOpcionesDNI();
+      document.getElementById('input-archivo-dni').click();
+    }
+
+    function procesarArchivoDNI(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          aplicarFiltrosGrisesYContraste(canvas);
+
+          document.getElementById('modal-camara-ocr').classList.remove('hidden');
+          document.getElementById('contenedor-video-ocr').classList.add('hidden');
+          document.getElementById('contenedor-preview-ocr').classList.remove('hidden');
+          
+          const previewCanvas = document.getElementById('canvas-preview');
+          previewCanvas.width = canvas.width;
+          previewCanvas.height = canvas.height;
+          const pCtx = previewCanvas.getContext('2d');
+          pCtx.drawImage(canvas, 0, 0);
+
+          ejecutarTesseractOCR(canvas.toDataURL('image/png'));
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    /* Motor Tesseract corregido con filtrado de imagen */
+    function aplicarFiltrosGrisesYContraste(canvas) {
+      const ctx = canvas.getContext('2d');
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imgData.data;
+      
+      for (let i = 0; i < data.length; i += 4) {
+        let avg = (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114);
+        avg = avg < 120 ? avg * 0.6 : avg * 1.4;
+        if (avg > 255) avg = 255;
+        data[i]     = avg; // R
+        data[i + 1] = avg; // G
+        data[i + 2] = avg; // B
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+
+    function ejecutarTesseractOCR(imageSource) {
+      document.getElementById('estado-procesamiento').innerText = "⚙️ Extrayendo datos limpios con OCR...";
+      
+      Tesseract.recognize(
+        imageSource,
+        'spa',
+        { logger: m => console.log(m) }
+      ).then(({ data: { text } }) => {
+        console.log("Texto detectado por OCR: ", text);
+        
+        const matchDNI = text.match(/\b\d{7,8}\b/);
+        const dniDetectado = matchDNI ? matchDNI[0] : "";
+
+        const lineas = text.split('\n').map(l => l.trim()).filter(l => l.length > 3);
+        let nombreDetectado = "";
+        for (let l of lineas) {
+          if (!/\d/.test(l) && l.length > 4 && !l.toUpperCase().includes('REPUBLICA') && !l.toUpperCase().includes('ARGENTINA')) {
+            nombreDetectado = l;
+            break;
+          }
+        }
+
+        cerrarEscanerOCR();
+
+        if (dniDetectado) {
+          if (navigator.vibrate) navigator.vibrate(200);
+          autocompletarCamposFinales(dniDetectado, nombreDetectado || "Verificar Nombre");
+        } else {
+          alert("No se pudo detectar el DNI automáticamente. Use la Opción 3 (Subir foto) seleccionando una captura directa de la galería.");
+        }
+      }).catch(err => {
+        cerrarEscanerOCR();
+        alert("Error al procesar el motor OCR.");
+      });
+    }
+
+    function autocompletarCamposFinales(dni, nombre) {
+      if (contextoActualDNI === 'personal') {
+        const inputDni = document.getElementById('p-dni');
+        inputDni.value = dni;
+        inputDni.dispatchEvent(new Event('input'));
+        if (nombre && nombre !== "Verificar Nombre") {
+          document.getElementById('p-nombre').value = nombre;
+        }
+        buscarYAutocompletarPersonal();
+      } else {
+        const inputProvDni = document.getElementById('prov-dni');
+        inputProvDni.value = dni;
+        inputProvDni.dispatchEvent(new Event('input'));
+        if (nombre && nombre !== "Verificar Nombre") {
+          document.getElementById('prov-nombre').value = nombre;
+        }
+        buscarYAutocompletarProveedor();
+      }
+    }
+  </script>
+
+  <!-- Service Worker para PWA -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      const swCode = `
+        self.addEventListener('install', e => self.skipWaiting());
+        self.addEventListener('fetch', e => {});
+      `;
+      const blob = new Blob([swCode], { type: 'application/javascript' });
+      const swUrl = URL.createObjectURL(blob);
+      navigator.serviceWorker.register(swUrl).catch(err => console.log('SW no registrado', err));
+    }
+  </script>
+</body>
+</html>
