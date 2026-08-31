@@ -10,12 +10,12 @@
     {
       "src": "/SECURITYSAT-Garibaldi/securitysat-logo.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/jpeg"
     },
     {
       "src": "/SECURITYSAT-Garibaldi/securitysat-logo.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/jpeg"
     }
   ]
 }
