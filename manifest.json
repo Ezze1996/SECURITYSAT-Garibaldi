@@ -1,24 +1,12 @@
-{
-  "name": "Control de Acceso - Security SAT",
-  "short_name": "Acceso SAT",
-  "start_url": "/SECURITYSAT-Garibaldi/index.html",
-  "scope": "/SECURITYSAT-Garibaldi/",
-  "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
-  "description": "Control de Acceso e Ingresos Hospital Central",
   "icons": [
     {
       "src": "/SECURITYSAT-Garibaldi/securitysat-logo.png",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     },
     {
       "src": "/SECURITYSAT-Garibaldi/securitysat-logo.png",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     }
   ]
-}
