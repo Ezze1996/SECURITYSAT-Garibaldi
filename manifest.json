@@ -8,12 +8,12 @@
   "theme_color": "#1e3a8a",
   "icons": [
     {
-      "src": "/securitysat-logo.png/",
+      "src": "/SECURITYSAT-GARIBALDI/securitysat-logo.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/securitysat-logo.png/",
+      "src": "/SECURITYSAT-Garibaldi/securitysat-logo.png",
       "sizes": "512x512",
       "type": "image/png"
     }
