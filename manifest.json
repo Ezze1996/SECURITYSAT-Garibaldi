@@ -1,6 +1,6 @@
 {
   "name": "SECURITYSAT-Garibaldi",
-  "short_name": "Acceso SAT",
+  "short_name": "SECURITYSAT-Garibaldi",
   "description": "Sistema de Control de Acceso e Ingresos/Salidas para Hospital Central, COIR y FUESMEN.",
   "start_url": "/SECURITYSAT-Garibaldi/",
   "scope": "/SECURITYSAT-Garibaldi/",
