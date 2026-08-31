@@ -1,3 +1,11 @@
+{
+  "name": "SECURITYSAT-Garibaldi",
+  "short_name": "SECURITYSAT-Garibaldi",
+  "description": "Sistema de Control de Acceso e Ingresos/Salidas para Hospital Central, COIR y FUESMEN.",
+  "start_url": "/SECURITYSAT-Garibaldi/",
+  "display": "standalone",
+  "background_color": "#1e3a8a",
+  "theme_color": "#1e3a8a",
   "icons": [
     {
       "src": "/SECURITYSAT-Garibaldi/securitysat-logo.png",
@@ -10,3 +18,4 @@
       "type": "image/png"
     }
   ]
+}
